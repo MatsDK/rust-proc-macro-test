@@ -2,7 +2,7 @@
 trait MyService {
     async fn send_message();
 
-    async fn send_event(a: String);
+    // async fn send_event(a: String);
 }
 
 fn main() {}
