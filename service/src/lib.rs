@@ -79,7 +79,8 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ref methods,
     } = parse_macro_input!(item as Service);
 
-    let method_names: &Vec<_> = &methods
+    let method_idents = methods.iter().map(|rpc| &rpc.ident).collect::<Vec<_>>();
+    let camel_case_method_idents: &Vec<_> = &methods
         .iter()
         .map(|method| snake_to_camel_case(&method.ident.unraw().to_string()))
         .collect();
@@ -89,9 +90,10 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
         methods,
         server_ident: &format_ident!("{}Server", ident),
         methods_enum_ident: &format_ident!("{}Methods", ident),
-        method_idents: &methods
+        method_idents: &method_idents,
+        camel_case_method_idents: &methods
             .iter()
-            .zip(method_names.iter())
+            .zip(camel_case_method_idents.iter())
             .map(|(method, name)| Ident::new(&name.to_string(), method.ident.span()))
             .collect::<Vec<_>>(),
     }
@@ -100,7 +102,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn snake_to_camel_case(ident: &str) -> String {
-    ident.to_string().to_case(Case::Camel)
+    ident.to_string().to_case(Case::UpperCamel)
 }
 
 struct ServiceGenerator<'a> {
@@ -108,7 +110,8 @@ struct ServiceGenerator<'a> {
     methods: &'a [Method],
     server_ident: &'a Ident,
     methods_enum_ident: &'a Ident,
-    method_idents: &'a [Ident],
+    camel_case_method_idents: &'a [Ident],
+    method_idents: &'a [&'a Ident],
 }
 
 impl<'a> ServiceGenerator<'a> {
@@ -122,7 +125,7 @@ impl<'a> ServiceGenerator<'a> {
 
         let types_and_fns = methods.iter().map(|Method { ident, output, .. }| {
             quote! {
-                fn #ident(self, ctx: String) #output;
+                fn #ident(self) #output;
             }
         });
 
@@ -142,6 +145,7 @@ impl<'a> ServiceGenerator<'a> {
         let ServiceGenerator { server_ident, .. } = self;
 
         quote! {
+            #[derive(Clone)]
             struct #server_ident<S> {
                 service: S
             }
@@ -152,15 +156,30 @@ impl<'a> ServiceGenerator<'a> {
         let ServiceGenerator {
             server_ident,
             service_ident,
+            method_idents,
+            methods_enum_ident,
+            camel_case_method_idents,
             ..
         } = self;
 
         quote! {
-            impl #server_ident<S>
+            trait HandleIncoming<S> {
+                fn handle_request(self, req: S);
+            }
+
+            impl<S> HandleIncoming<#methods_enum_ident> for #server_ident<S>
                 where S: #service_ident
             {
-                fn serve(self) {
-                    println!("Hello world");
+                fn handle_request(self, req: #methods_enum_ident) {
+                    match req {
+                        #(
+                            #methods_enum_ident::#camel_case_method_idents => {
+                                 #service_ident::#method_idents(
+                                        self.service,
+                                )
+                            }
+                        )*
+                    }
                 }
             }
         }
@@ -169,12 +188,12 @@ impl<'a> ServiceGenerator<'a> {
     fn method_idents_enum(&self) -> TokenStream2 {
         let ServiceGenerator {
             methods_enum_ident,
-            method_idents,
+            camel_case_method_idents,
             ..
         } = self;
         quote! {
             enum #methods_enum_ident {
-                #( #method_idents ),*
+                #( #camel_case_method_idents ),*
             }
         }
     }
