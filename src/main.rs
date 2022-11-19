@@ -1,3 +1,5 @@
+use std::io;
+
 #[service::service]
 trait MyService {
     async fn send_message();
@@ -5,6 +7,7 @@ trait MyService {
     async fn send_event(a: String);
 }
 
+#[derive(Clone)]
 struct SomeServer;
 
 impl MyService for SomeServer {
@@ -17,11 +20,13 @@ impl MyService for SomeServer {
     }
 }
 
-fn main() {
-    let server = SomeServer;
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    // let server = SomeServer.serve();
 
-    let server1 = server.serve();
+    // server.serve(MyServiceMethods::SendMessage);
+    // server.handle_request(MyServiceMethods::SendEvent);
+    server::WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
 
-    // server1.serve(MyServiceMethods::SendMessage);
-    server1.handle_request(MyServiceMethods::SendEvent);
+    Ok(())
 }

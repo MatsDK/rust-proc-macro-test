@@ -80,9 +80,9 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } = parse_macro_input!(item as Service);
 
     let method_idents = methods.iter().map(|rpc| &rpc.ident).collect::<Vec<_>>();
-    let camel_case_method_idents: &Vec<_> = &methods
+    let camel_case_method_idents: &Vec<_> = &method_idents
         .iter()
-        .map(|method| snake_to_camel_case(&method.ident.unraw().to_string()))
+        .map(|ident| snake_to_camel_case(&ident.unraw().to_string()))
         .collect();
 
     ServiceGenerator {
@@ -163,15 +163,14 @@ impl<'a> ServiceGenerator<'a> {
         } = self;
 
         quote! {
-            trait HandleIncoming<S> {
-                fn handle_request(self, req: S);
-            }
+            use server::HandleIncoming;
 
-            impl<S> HandleIncoming<#methods_enum_ident> for #server_ident<S>
+            impl<S> HandleIncoming for #server_ident<S>
                 where S: #service_ident
             {
-                fn handle_request(self, req: #methods_enum_ident) {
-                    match req {
+                fn handle_request(self, req: Vec<u8>) {
+                    let res: #methods_enum_ident = serde_json::from_slice(&req).unwrap();
+                    match res {
                         #(
                             #methods_enum_ident::#camel_case_method_idents => {
                                  #service_ident::#method_idents(
@@ -192,6 +191,7 @@ impl<'a> ServiceGenerator<'a> {
             ..
         } = self;
         quote! {
+            #[derive(serde::Serialize, serde::Deserialize)]
             enum #methods_enum_ident {
                 #( #camel_case_method_idents ),*
             }
