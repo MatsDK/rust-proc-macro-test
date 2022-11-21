@@ -22,10 +22,6 @@ impl MyService for SomeServer {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    // let server = SomeServer.serve();
-
-    // server.serve(MyServiceMethods::SendMessage);
-    // server.handle_request(MyServiceMethods::SendEvent);
     server::WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
 
     Ok(())

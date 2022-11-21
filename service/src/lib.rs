@@ -37,6 +37,15 @@ impl Parse for Service {
             methods.push(<Method>::parse(&content)?);
         }
 
+        for method in &methods {
+            if method.ident == "serve" {
+                Err(syn::Error::new(
+                    method.ident.span(),
+                    format!("method name conflicts with generated fn `{ident}::serve`"),
+                ))?;
+            }
+        }
+
         Ok(Service { ident, methods })
     }
 }
@@ -163,9 +172,7 @@ impl<'a> ServiceGenerator<'a> {
         } = self;
 
         quote! {
-            use server::HandleIncoming;
-
-            impl<S> HandleIncoming for #server_ident<S>
+            impl<S> server::HandleIncoming for #server_ident<S>
                 where S: #service_ident
             {
                 fn handle_request(self, req: Vec<u8>) {
@@ -175,7 +182,7 @@ impl<'a> ServiceGenerator<'a> {
                             #methods_enum_ident::#camel_case_method_idents => {
                                  #service_ident::#method_idents(
                                         self.service,
-                                )
+                                );
                             }
                         )*
                     }

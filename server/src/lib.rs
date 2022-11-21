@@ -21,6 +21,10 @@ where
         Ok(())
     }
 
+    fn on_close(&mut self, _code: ws::CloseCode, reason: &str) {
+        println!("Connection closed {reason}");
+    }
+
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         match msg {
             Message::Binary(b) => {
@@ -41,8 +45,8 @@ pub struct WsServer {}
 impl WsServer {
     pub async fn listen<A, S>(addr: A, serve: S) -> io::Result<()>
     where
-        A: ToSocketAddrs + std::fmt::Debug + Send + 'static,
-        S: HandleIncoming + Clone + std::marker::Send + 'static,
+        A: ToSocketAddrs + Debug + Send + 'static,
+        S: HandleIncoming + Clone + Send + 'static,
     {
         tokio::spawn(async move {
             if let Err(error) = listen(addr, |out| Server {
