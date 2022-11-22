@@ -1,4 +1,7 @@
-use std::io;
+use std::{collections::HashMap, io};
+
+use serde::{Deserialize, Serialize};
+use server::WsServer;
 
 #[service::service]
 trait MyService {
@@ -22,7 +25,10 @@ impl MyService for SomeServer {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    server::WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
+    // server::WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
+    WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
+
+    let _x = MyServiceClient::new();
 
     Ok(())
 }

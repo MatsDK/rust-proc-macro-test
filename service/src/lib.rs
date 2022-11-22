@@ -105,6 +105,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
             .zip(camel_case_method_idents.iter())
             .map(|(method, name)| Ident::new(&name.to_string(), method.ident.span()))
             .collect::<Vec<_>>(),
+        client_ident: &format_ident!("{}Client", ident),
     }
     .into_token_stream()
     .into()
@@ -118,6 +119,7 @@ struct ServiceGenerator<'a> {
     service_ident: &'a Ident,
     methods: &'a [Method],
     server_ident: &'a Ident,
+    client_ident: &'a Ident,
     methods_enum_ident: &'a Ident,
     camel_case_method_idents: &'a [Ident],
     method_idents: &'a [&'a Ident],
@@ -204,6 +206,28 @@ impl<'a> ServiceGenerator<'a> {
             }
         }
     }
+
+    fn client_struct(&self) -> TokenStream2 {
+        let ServiceGenerator { client_ident, .. } = self;
+
+        quote! {
+            #[allow(unused)]
+            #[derive(Clone, Debug)]
+            struct #client_ident;
+        }
+    }
+
+    fn impl_client_struct(&self) -> TokenStream2 {
+        let ServiceGenerator { client_ident, .. } = self;
+
+        quote! {
+            impl #client_ident {
+                fn new() -> Self {
+                    Self
+                }
+            }
+        }
+    }
 }
 
 impl<'a> ToTokens for ServiceGenerator<'a> {
@@ -213,6 +237,8 @@ impl<'a> ToTokens for ServiceGenerator<'a> {
             self.server_struct(),
             self.impl_server_struct(),
             self.method_idents_enum(),
+            self.client_struct(),
+            self.impl_client_struct(),
         ])
     }
 }

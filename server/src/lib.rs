@@ -45,7 +45,7 @@ pub struct WsServer {}
 impl WsServer {
     pub async fn listen<A, S>(addr: A, serve: S) -> io::Result<()>
     where
-        A: ToSocketAddrs + Debug + Send + 'static,
+        A: ToSocketAddrs + Send + 'static + std::fmt::Debug,
         S: HandleIncoming + Clone + Send + 'static,
     {
         tokio::spawn(async move {
