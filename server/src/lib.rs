@@ -40,7 +40,7 @@ where
     }
 }
 
-pub struct WsServer {}
+pub struct WsServer;
 
 impl WsServer {
     pub async fn listen<A, S>(addr: A, serve: S) -> io::Result<()>

@@ -1,6 +1,5 @@
-use std::{collections::HashMap, io};
+use std::{io, thread, time::Duration};
 
-use serde::{Deserialize, Serialize};
 use server::WsServer;
 
 #[service::service]
@@ -19,16 +18,25 @@ impl MyService for SomeServer {
     }
 
     fn send_event(self) {
-        println!("Called send_event");
+        println!("Called send_event21");
     }
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    // server::WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
     WsServer::listen("127.0.0.1:3000", SomeServer.serve()).await?;
+    println!("server started");
 
-    let _x = MyServiceClient::new();
+    thread::sleep(Duration::from_millis(1000));
+
+    println!("create client");
+    let client = SomeServer.build_client();
+
+    thread::sleep(Duration::from_millis(1000));
+
+    println!("send messages");
+    client.send_event().await?;
+    client.send_message().await?;
 
     Ok(())
 }

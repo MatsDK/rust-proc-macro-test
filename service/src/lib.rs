@@ -131,6 +131,7 @@ impl<'a> ServiceGenerator<'a> {
             service_ident,
             server_ident,
             methods,
+            client_ident,
             ..
         } = self;
 
@@ -145,7 +146,11 @@ impl<'a> ServiceGenerator<'a> {
                 #( #types_and_fns )*
 
                 fn serve(self) -> #server_ident<Self> {
-                        #server_ident { service: self }
+                    #server_ident { service: self }
+                }
+
+                fn build_client(self) -> #client_ident {
+                    #client_ident::build()
                 }
             }
 
@@ -200,7 +205,7 @@ impl<'a> ServiceGenerator<'a> {
             ..
         } = self;
         quote! {
-            #[derive(serde::Serialize, serde::Deserialize)]
+            #[derive(serde::Serialize, serde::Deserialize, Debug)]
             enum #methods_enum_ident {
                 #( #camel_case_method_idents ),*
             }
@@ -208,12 +213,18 @@ impl<'a> ServiceGenerator<'a> {
     }
 
     fn client_struct(&self) -> TokenStream2 {
-        let ServiceGenerator { client_ident, .. } = self;
+        let ServiceGenerator {
+            client_ident,
+            methods_enum_ident,
+            ..
+        } = self;
 
         quote! {
             #[allow(unused)]
             #[derive(Clone, Debug)]
-            struct #client_ident;
+            struct #client_ident {
+                tx: tokio::sync::mpsc::Sender<Vec<u8>>
+            }
         }
     }
 
@@ -222,9 +233,46 @@ impl<'a> ServiceGenerator<'a> {
 
         quote! {
             impl #client_ident {
-                fn new() -> Self {
-                    Self
+                fn build() -> Self {
+                    let tx = client::WsClient::connect("ws://127.0.0.1:3000");
+
+                    Self { tx }
                 }
+            }
+        }
+    }
+
+    fn impl_methods_for_client(&self) -> TokenStream2 {
+        let ServiceGenerator {
+            client_ident,
+            methods_enum_ident,
+            method_idents,
+            camel_case_method_idents,
+            ..
+        } = self;
+
+        quote! {
+            impl #client_ident {
+                #(
+                    fn #method_idents(&self)
+                      -> impl std::future::Future<Output = std::io::Result<()>> + '_
+                    {
+                        let req = serde_json::to_vec(
+                            &#methods_enum_ident::#camel_case_method_idents
+                        ).unwrap();
+
+                        let fut = self.tx.send(req);
+
+                        async move {
+                            match fut.await {
+                                Ok(_) => std::io::Result::Ok(()),
+                                _ =>  {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                    }
+                )*
             }
         }
     }
@@ -239,6 +287,7 @@ impl<'a> ToTokens for ServiceGenerator<'a> {
             self.method_idents_enum(),
             self.client_struct(),
             self.impl_client_struct(),
+            self.impl_methods_for_client(),
         ])
     }
 }
