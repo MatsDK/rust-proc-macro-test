@@ -9,7 +9,7 @@ use syn::{
     parse::{Parse, ParseStream, Result},
     parse_macro_input,
     token::Comma,
-    FnArg, Ident, PatType, ReturnType, Token,
+    FnArg, Ident, PatType, ReturnType, Token, Visibility,
 };
 
 struct Service {
@@ -26,6 +26,7 @@ struct Method {
 impl Parse for Service {
     fn parse(input: ParseStream) -> Result<Self> {
         // input.parse::<Token![trait]>()?;
+        let vis: Visibility = input.parse()?;
         <Token![trait]>::parse(input)?;
         let ident: Ident = input.parse()?;
 
@@ -131,7 +132,6 @@ impl<'a> ServiceGenerator<'a> {
             service_ident,
             server_ident,
             methods,
-            client_ident,
             ..
         } = self;
 
@@ -147,10 +147,6 @@ impl<'a> ServiceGenerator<'a> {
 
                 fn serve(self) -> #server_ident<Self> {
                     #server_ident { service: self }
-                }
-
-                fn build_client(self) -> #client_ident {
-                    #client_ident::build()
                 }
             }
 
@@ -213,18 +209,12 @@ impl<'a> ServiceGenerator<'a> {
     }
 
     fn client_struct(&self) -> TokenStream2 {
-        let ServiceGenerator {
-            client_ident,
-            methods_enum_ident,
-            ..
-        } = self;
+        let ServiceGenerator { client_ident, .. } = self;
 
         quote! {
             #[allow(unused)]
-            #[derive(Clone, Debug)]
-            struct #client_ident {
-                tx: tokio::sync::mpsc::Sender<Vec<u8>>
-            }
+            // #[derive(Clone)]
+            struct #client_ident(client::Channel);
         }
     }
 
@@ -233,10 +223,15 @@ impl<'a> ServiceGenerator<'a> {
 
         quote! {
             impl #client_ident {
-                fn build() -> Self {
-                    let tx = client::WsClient::connect("ws://127.0.0.1:3000");
+                async fn new<A>(resolvers: A) -> Self
+                where
+                    A: server::HandleIncoming + Clone + Send + 'static
+                {
+                    server::WsServer::listen("127.0.0.1:3000", resolvers).await.unwrap();
+                    let (channel, mut rx) = client::Channel::new();
 
-                    Self { tx }
+                    client::WsClient::new(rx).await;
+                    Self(channel)
                 }
             }
         }
@@ -260,8 +255,7 @@ impl<'a> ServiceGenerator<'a> {
                         let req = serde_json::to_vec(
                             &#methods_enum_ident::#camel_case_method_idents
                         ).unwrap();
-
-                        let fut = self.tx.send(req);
+                        let fut = self.0.tx.send(req);
 
                         async move {
                             match fut.await {
