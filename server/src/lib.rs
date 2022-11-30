@@ -2,19 +2,11 @@ use std::io;
 use std::net::ToSocketAddrs;
 use ws::{listen, Handler, Message, Sender};
 
-pub trait HandleIncoming {
-    fn handle_request(self, req: Vec<u8>);
-}
-
-struct Server<S> {
+struct Server {
     out: Sender,
-    serve: S,
 }
 
-impl<S> Handler for Server<S>
-where
-    S: HandleIncoming + Clone,
-{
+impl Handler for Server {
     fn on_open(&mut self, _shake: ws::Handshake) -> ws::Result<()> {
         println!("New connection");
 
@@ -26,15 +18,8 @@ where
     }
 
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
-        match msg {
-            Message::Binary(b) => {
-                self.serve.clone().handle_request(b);
-            }
-            Message::Text(t) => {
-                println!("text message: {}", t);
-                println!("should get binary");
-            }
-        }
+        println!("got message, {:?}", msg);
+        self.out.broadcast(msg)?;
 
         Ok(())
     }
@@ -43,19 +28,11 @@ where
 pub struct WsServer;
 
 impl WsServer {
-    pub async fn listen<A, S>(addr: A, serve: S) -> io::Result<()>
+    pub async fn listen<A>(addr: A) -> io::Result<()>
     where
         A: ToSocketAddrs + Send + 'static + std::fmt::Debug,
-        S: HandleIncoming + Clone + Send + 'static,
     {
-        tokio::spawn(async move {
-            if let Err(error) = listen(addr, |out| Server {
-                out,
-                serve: serve.clone(),
-            }) {
-                eprintln!("Error: {:?}", error);
-            };
-        });
+        listen(addr, |out| Server { out }).unwrap();
 
         Ok(())
     }

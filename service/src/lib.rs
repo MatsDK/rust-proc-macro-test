@@ -25,8 +25,7 @@ struct Method {
 
 impl Parse for Service {
     fn parse(input: ParseStream) -> Result<Self> {
-        // input.parse::<Token![trait]>()?;
-        let vis: Visibility = input.parse()?;
+        let _vis: Visibility = input.parse()?;
         <Token![trait]>::parse(input)?;
         let ident: Ident = input.parse()?;
 
@@ -175,10 +174,10 @@ impl<'a> ServiceGenerator<'a> {
         } = self;
 
         quote! {
-            impl<S> server::HandleIncoming for #server_ident<S>
+            impl<S> client::HandleIncoming for #server_ident<S>
                 where S: #service_ident
             {
-                fn handle_request(self, req: Vec<u8>) {
+                fn handle_incoming_event(self, req: Vec<u8>) {
                     let res: #methods_enum_ident = serde_json::from_slice(&req).unwrap();
                     match res {
                         #(
@@ -213,7 +212,6 @@ impl<'a> ServiceGenerator<'a> {
 
         quote! {
             #[allow(unused)]
-            // #[derive(Clone)]
             struct #client_ident(client::Channel);
         }
     }
@@ -223,15 +221,14 @@ impl<'a> ServiceGenerator<'a> {
 
         quote! {
             impl #client_ident {
-                async fn new<A>(resolvers: A) -> Self
+                async fn new<A, R>(addr: A, resolvers: R) -> std::io::Result<Self>
                 where
-                    A: server::HandleIncoming + Clone + Send + 'static
+                    A: std::borrow::Borrow<str> + Send + 'static,
+                    R: client::HandleIncoming + Clone + Send + 'static
                 {
-                    server::WsServer::listen("127.0.0.1:3000", resolvers).await.unwrap();
-                    let (channel, mut rx) = client::Channel::new();
+                    let channel = client::WsClient::connect(addr, resolvers).await?;
 
-                    client::WsClient::new(rx).await;
-                    Self(channel)
+                    Ok(Self(channel))
                 }
             }
         }
