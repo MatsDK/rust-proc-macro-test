@@ -9,7 +9,7 @@ use syn::{
     parse::{Parse, ParseStream, Result},
     parse_macro_input,
     token::Comma,
-    FnArg, Ident, PatType, ReturnType, Token, Visibility,
+    FnArg, Ident, Pat, PatType, ReturnType, Token, Visibility,
 };
 
 struct Service {
@@ -88,6 +88,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ref methods,
     } = parse_macro_input!(item as Service);
 
+    let args: &[&[PatType]] = &methods.iter().map(|rpc| &*rpc.args).collect::<Vec<_>>();
     let method_idents = methods.iter().map(|rpc| &rpc.ident).collect::<Vec<_>>();
     let camel_case_method_idents: &Vec<_> = &method_idents
         .iter()
@@ -97,6 +98,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
     ServiceGenerator {
         service_ident: &ident,
         methods,
+        args,
         server_ident: &format_ident!("{}Server", ident),
         methods_enum_ident: &format_ident!("{}Methods", ident),
         method_idents: &method_idents,
@@ -118,6 +120,7 @@ fn snake_to_camel_case(ident: &str) -> String {
 struct ServiceGenerator<'a> {
     service_ident: &'a Ident,
     methods: &'a [Method],
+    args: &'a [&'a [PatType]],
     server_ident: &'a Ident,
     client_ident: &'a Ident,
     methods_enum_ident: &'a Ident,
@@ -134,11 +137,17 @@ impl<'a> ServiceGenerator<'a> {
             ..
         } = self;
 
-        let types_and_fns = methods.iter().map(|Method { ident, output, .. }| {
-            quote! {
-                fn #ident(self) #output;
-            }
-        });
+        let types_and_fns = methods.iter().map(
+            |Method {
+                 ident,
+                 output,
+                 args,
+             }| {
+                quote! {
+                    fn #ident(self, #( #args ),*) #output;
+                }
+            },
+        );
 
         quote! {
             trait #service_ident: Sized {
@@ -170,8 +179,14 @@ impl<'a> ServiceGenerator<'a> {
             method_idents,
             methods_enum_ident,
             camel_case_method_idents,
+            args,
             ..
         } = self;
+
+        let arg_pats: &[Vec<&Pat>] = &args
+            .iter()
+            .map(|args| args.iter().map(|arg| &*arg.pat).collect())
+            .collect::<Vec<_>>();
 
         quote! {
             impl<S> client::HandleIncoming for #server_ident<S>
@@ -181,9 +196,9 @@ impl<'a> ServiceGenerator<'a> {
                     let res: #methods_enum_ident = serde_json::from_slice(&req).unwrap();
                     match res {
                         #(
-                            #methods_enum_ident::#camel_case_method_idents => {
+                            #methods_enum_ident::#camel_case_method_idents{ #( #arg_pats ),* } => {
                                  #service_ident::#method_idents(
-                                        self.service,
+                                        self.service, #( #arg_pats ),*
                                 );
                             }
                         )*
@@ -197,12 +212,13 @@ impl<'a> ServiceGenerator<'a> {
         let ServiceGenerator {
             methods_enum_ident,
             camel_case_method_idents,
+            args,
             ..
         } = self;
         quote! {
             #[derive(serde::Serialize, serde::Deserialize, Debug)]
             enum #methods_enum_ident {
-                #( #camel_case_method_idents ),*
+                #( #camel_case_method_idents{ #( #args ),* } ),*
             }
         }
     }
@@ -240,17 +256,23 @@ impl<'a> ServiceGenerator<'a> {
             methods_enum_ident,
             method_idents,
             camel_case_method_idents,
+            args,
             ..
         } = self;
+
+        let arg_pats: &[Vec<&Pat>] = &args
+            .iter()
+            .map(|args| args.iter().map(|arg| &*arg.pat).collect())
+            .collect::<Vec<_>>();
 
         quote! {
             impl #client_ident {
                 #(
-                    fn #method_idents(&self)
+                    fn #method_idents(&self, #( #args ),*)
                       -> impl std::future::Future<Output = std::io::Result<()>> + '_
                     {
                         let req = serde_json::to_vec(
-                            &#methods_enum_ident::#camel_case_method_idents
+                            &#methods_enum_ident::#camel_case_method_idents{ #( #arg_pats ),* }
                         ).unwrap();
                         let fut = self.0.tx.send(req);
 

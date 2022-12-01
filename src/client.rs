@@ -3,15 +3,15 @@ use tokio::io::{stdin, AsyncBufReadExt, BufReader};
 
 #[service::service]
 trait MyService {
-    async fn send_event();
+    async fn send_event(conf: String);
     async fn send_message();
 }
 
 #[derive(Clone)]
 struct MyServiceResolver;
 impl MyService for MyServiceResolver {
-    fn send_event(self) {
-        println!("send event called");
+    fn send_event(self, arg: String) {
+        println!("send event called {arg}");
     }
 
     fn send_message(self) {
@@ -26,7 +26,7 @@ async fn main() -> io::Result<()> {
     let mut stdin = BufReader::new(stdin()).lines();
 
     while let Ok(_line) = stdin.next_line().await {
-        client.send_event().await?;
+        client.send_event("conf message".to_string()).await?;
         client.send_message().await?;
     }
 
