@@ -25,9 +25,9 @@ async fn main() -> io::Result<()> {
 
     let mut stdin = BufReader::new(stdin()).lines();
 
-    while let Ok(_line) = stdin.next_line().await {
-        client.send_event("conf message".to_string()).await?;
-        client.send_message().await?;
+    while let Ok(line) = stdin.next_line().await {
+        client.send_event(line.unwrap()).await?;
+        // client.send_message().await?;
     }
 
     Ok(())

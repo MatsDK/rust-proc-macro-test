@@ -89,6 +89,11 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } = parse_macro_input!(item as Service);
 
     let args: &[&[PatType]] = &methods.iter().map(|rpc| &*rpc.args).collect::<Vec<_>>();
+    let arg_pats = &args
+        .iter()
+        .map(|args| args.iter().map(|arg| &*arg.pat).collect())
+        .collect::<Vec<_>>();
+
     let method_idents = methods.iter().map(|rpc| &rpc.ident).collect::<Vec<_>>();
     let camel_case_method_idents: &Vec<_> = &method_idents
         .iter()
@@ -99,6 +104,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
         service_ident: &ident,
         methods,
         args,
+        arg_pats,
         server_ident: &format_ident!("{}Server", ident),
         methods_enum_ident: &format_ident!("{}Methods", ident),
         method_idents: &method_idents,
@@ -121,6 +127,7 @@ struct ServiceGenerator<'a> {
     service_ident: &'a Ident,
     methods: &'a [Method],
     args: &'a [&'a [PatType]],
+    arg_pats: &'a [Vec<&'a Pat>],
     server_ident: &'a Ident,
     client_ident: &'a Ident,
     methods_enum_ident: &'a Ident,
@@ -179,14 +186,9 @@ impl<'a> ServiceGenerator<'a> {
             method_idents,
             methods_enum_ident,
             camel_case_method_idents,
-            args,
+            arg_pats,
             ..
         } = self;
-
-        let arg_pats: &[Vec<&Pat>] = &args
-            .iter()
-            .map(|args| args.iter().map(|arg| &*arg.pat).collect())
-            .collect::<Vec<_>>();
 
         quote! {
             impl<S> client::HandleIncoming for #server_ident<S>
@@ -257,13 +259,9 @@ impl<'a> ServiceGenerator<'a> {
             method_idents,
             camel_case_method_idents,
             args,
+            arg_pats,
             ..
         } = self;
-
-        let arg_pats: &[Vec<&Pat>] = &args
-            .iter()
-            .map(|args| args.iter().map(|arg| &*arg.pat).collect())
-            .collect::<Vec<_>>();
 
         quote! {
             impl #client_ident {
