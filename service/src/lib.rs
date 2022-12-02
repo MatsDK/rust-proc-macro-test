@@ -9,7 +9,7 @@ use syn::{
     parse::{Parse, ParseStream, Result},
     parse_macro_input,
     token::Comma,
-    FnArg, Ident, Pat, PatType, ReturnType, Token, Visibility,
+    FnArg, Ident, ImplItem, ItemImpl, Pat, PatType, ReturnType, Token, Visibility,
 };
 
 struct Service {
@@ -160,7 +160,7 @@ impl<'a> ServiceGenerator<'a> {
             trait #service_ident: Sized {
                 #( #types_and_fns )*
 
-                fn serve(self) -> #server_ident<Self> {
+                fn build(self) -> #server_ident<Self> {
                     #server_ident { service: self }
                 }
             }
@@ -218,7 +218,7 @@ impl<'a> ServiceGenerator<'a> {
             ..
         } = self;
         quote! {
-            #[derive(serde::Serialize, serde::Deserialize, Debug)]
+            #[derive(serde::Serialize, serde::Deserialize)]
             enum #methods_enum_ident {
                 #( #camel_case_method_idents{ #( #args ),* } ),*
             }
@@ -301,4 +301,22 @@ impl<'a> ToTokens for ServiceGenerator<'a> {
             self.impl_methods_for_client(),
         ])
     }
+}
+
+#[proc_macro_attribute]
+pub fn server(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    let mut item = parse_macro_input!(input as ItemImpl);
+
+    for inner in &mut item.items {
+        match inner {
+            ImplItem::Method(method) => {
+                if method.sig.asyncness.is_some() {
+                    method.sig.asyncness = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    quote! { #item }.into()
 }

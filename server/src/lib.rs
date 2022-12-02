@@ -8,17 +8,16 @@ struct Server {
 
 impl Handler for Server {
     fn on_open(&mut self, _shake: ws::Handshake) -> ws::Result<()> {
-        println!("New connection");
+        // println!("New connection");
 
         Ok(())
     }
 
-    fn on_close(&mut self, _code: ws::CloseCode, reason: &str) {
-        println!("Connection closed {reason}");
+    fn on_close(&mut self, _code: ws::CloseCode, _reason: &str) {
+        // println!("Connection closed {reason}");
     }
 
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
-        println!("got message, {:?}", msg);
         self.out.broadcast(msg)?;
 
         Ok(())
